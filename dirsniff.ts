@@ -6,9 +6,9 @@ import * as path from "path"
 import { exit } from "process"
 import { stringify } from "querystring"
 
-let MAXDEPTH = 1		// how many directories deep do we look if we don't recognize anything
-let VERBOSE = false		// if true, print a summary of child files and directories
-let FOLLOWDOT = false	// if true, look into dot (hidden) directories as well as regular directories
+let MAXDEPTH = 1        // how many directories deep do we look if we don't recognize anything
+let VERBOSE = false     // if true, print a summary of child files and directories
+let FOLLOWDOT = false   // if true, look into dot (hidden) directories as well as regular directories
                         // TODO the FOLLOWDOT option should be changed to look into all special directory names such as revDNS and UUID
 
 async function main() {
@@ -116,7 +116,7 @@ function printError(depth: number, msg: string): void {
 }
 
 // function printCollectionAnswer(depth: number, num: number, kind: string): void {
-// 	printAnswer(depth, `a collection of ${num} ${kind} files`)
+//     printAnswer(depth, `a collection of ${num} ${kind} files`)
 // }
 
 ////////
@@ -136,8 +136,8 @@ function includes(strings: string[], str: string[]): boolean {
 async function processDirents(depth: number, filename: string, dirents: DirentStat[]) {
     printEntry(depth, filename)
         
-    //const revDNSRegex	= new RegExp(/^[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+$/)
-    const UUIDRegex		= new RegExp(/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$|^[0-9A-Fa-f]{32}$/)
+    //const revDNSRegex = new RegExp(/^[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+$/)
+    const UUIDRegex     = new RegExp(/^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$|^[0-9A-Fa-f]{32}$/)
 
     // zero-length files are an orthogonal collection
     const zeroLenFilenames = dirents.filter(d => {
@@ -147,27 +147,27 @@ async function processDirents(depth: number, filename: string, dirents: DirentSt
     // separate non-dirs into files, broken ones like symlinks that throw an exception, and "unknown" ones that are types other than files and dirs
     // keep all three as entries
     const [
-        brokenEntries,				// 0
-        unknownEntries,				// 1
-        dotFiles,					// 2
-        normalFiles,				// 3
-        dotDirectories,				// 4
-        //reverseDNSDirectories,	// 5
-        directoriesWithExtensions,	// 6
-        UUIDDirectories,			// 7
-        normalDirectories,			// 8
-        shouldBeEmpty,				// EXTRA!
+        brokenEntries,              // 0
+        unknownEntries,             // 1
+        dotFiles,                   // 2
+        normalFiles,                // 3
+        dotDirectories,             // 4
+        //reverseDNSDirectories,    // 5
+        directoriesWithExtensions,  // 6
+        UUIDDirectories,            // 7
+        normalDirectories,          // 8
+        shouldBeEmpty,              // EXTRA!
     ] = collate(
         dirents, [
-            d => d.statError !== undefined,						// 0 broken
-            d => !d.isFile() && !d.isDirectory(),				// 1 unknown type
-            d => d.isFile() && d.name[0] === '.',				// 2 dot file
-            d => d.isFile(),									// 3 normal file
-            d => d.isDirectory() && d.name[0] === '.',			// 4 dot dir
-            //d => d.isDirectory() && revDNSRegex.test(d.name),	// 5 reverse dns: com.apple.foo.bar
-            d => d.isDirectory() && d.name.includes('.'),		// 6 dir with file extension
-            d => d.isDirectory() && UUIDRegex.test(d.name),		// 7 UUID
-            d => d.isDirectory(),								// 8 normal dir
+            d => d.statError !== undefined,                     // 0 broken
+            d => !d.isFile() && !d.isDirectory(),               // 1 unknown type
+            d => d.isFile() && d.name[0] === '.',               // 2 dot file
+            d => d.isFile(),                                    // 3 normal file
+            d => d.isDirectory() && d.name[0] === '.',          // 4 dot dir
+            //d => d.isDirectory() && revDNSRegex.test(d.name), // 5 reverse dns: com.apple.foo.bar
+            d => d.isDirectory() && d.name.includes('.'),       // 6 dir with file extension
+            d => d.isDirectory() && UUIDRegex.test(d.name),     // 7 UUID
+            d => d.isDirectory(),                               // 8 normal dir
         ]
     ).map(dsa => dsa.map(ds => ds.name))
     
@@ -210,18 +210,18 @@ async function processDirents(depth: number, filename: string, dirents: DirentSt
 
         if (!identified) {
             const collections: [collection, string][] = [
-                [ brokenEntries,				"broken" ],
-                [ normalFiles,					"files" ],
-                [ normalDirectories,			"dirs" ],
-                [ zeroLenFilenames,				"zero byte files" ],
-                [ dotFiles,						"dot files" ],
-                [ dotDirectories,				"dot dirs" ],
-                [ directoriesWithExtensions,	"dirs with extensions" ],
-                [ unknownEntries,				"neither files nor dirs" ],
-                [ dirextObj,					"dir extensions" ],
-                [ fileextObj,					"file extensions" ],
-                //[ reverseDNSDirectories,		"reverse-DNS dirs" ],
-                [ UUIDDirectories,				"UUID dirs" ],
+                [ brokenEntries,                "broken" ],
+                [ normalFiles,                  "files" ],
+                [ normalDirectories,            "dirs" ],
+                [ zeroLenFilenames,             "zero byte files" ],
+                [ dotFiles,                     "dot files" ],
+                [ dotDirectories,               "dot dirs" ],
+                [ directoriesWithExtensions,    "dirs with extensions" ],
+                [ unknownEntries,               "neither files nor dirs" ],
+                [ dirextObj,                    "dir extensions" ],
+                [ fileextObj,                   "file extensions" ],
+                //[ reverseDNSDirectories,      "reverse-DNS dirs" ],
+                [ UUIDDirectories,              "UUID dirs" ],
             ]
 
             if (VERBOSE) verboseSummary(depth, collections)
@@ -438,10 +438,10 @@ function autoIdentify(
 }
 
 function checkForCollections(fileextObj: extensionObject, fileExtensions: string[]): string | undefined {
-    const audioexts = [".mp3", ".mp4", ".m4a", ".ogg", ".ram", ".wav"]				// TODO mp4 can also be video
+    const audioexts = [".mp3", ".mp4", ".m4a", ".ogg", ".ram", ".wav"]              // TODO mp4 can also be video
     const jpegexts = [".jpeg", ".jpg"]
-    const otherimgexts = [".gif", ".png", ".svg", ".tiff", ".webp"]					// TODO webp can also be audio
-    const videxts = [".mov", ".mp4", ".webp"]										// TODO mp4 can also be audio
+    const otherimgexts = [".gif", ".png", ".svg", ".tiff", ".webp"]                 // TODO webp can also be audio
+    const videxts = [".mov", ".mp4", ".webp"]                                       // TODO mp4 can also be audio
     const jsexts = [".cjs", ".coffee", ".cts", ".js", ".jsx", ".mjs", ".mts", ".ts", ".tsx"]
     const plexts = [".pod", ".pl", ".pm"]
     const wordexts = [".doc", ".docx"]
@@ -520,7 +520,7 @@ function verboseSummary(depth: number, collections: [collection, string][]) {
                     arr = arr.map(d => (d as DirentStat).name)
                 }
                 //if (coll[0] === normalDirectories)
-                //	str = arr.join('\n')
+                //    str = arr.join('\n')
                 //else
                 str = arr.join(", ")
             }

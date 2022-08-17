@@ -12,7 +12,7 @@
     "type": "git",
     "url": "git+https://github.com/hippietrail/dirsniff.git"
   },
-  "author": "",
+  "author": "Andrew Dunbar",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/hippietrail/dirsniff/issues"

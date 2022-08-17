@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // TODO so far NONE of the checks are case-insensitive. Probably only some should be?
 
 import { Dirent, Stats } from "fs"

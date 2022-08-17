@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
-import { Dirent, Stats } from "fs"
 import * as fsp from "fs/promises"
 import * as path from "path"
 import { exit } from "process"
-import { stringify } from "querystring"
 
 let MAXDEPTH = 1        // how many directories deep do we look if we don't recognize anything
 let VERBOSE = false     // if true, print a summary of child files and directories
@@ -34,8 +32,8 @@ type extensionObject = { [index: string]: number }
 type collection = DirentStat[] | string[] | extensionObject
 
 interface DirentStat {
-     isFile: () => boolean
-     isDirectory: () => boolean
+    isFile: () => boolean
+    isDirectory: () => boolean
     name: string
     size?: number
     statError?: string
@@ -226,8 +224,6 @@ async function processDirents(depth: number, filename: string, dirents: DirentSt
 
             if (VERBOSE) verboseSummary(depth, collections)
 
-            // TODO for now only recursing in directories with "normal" names
-            // TODO so not beginning with or including '.' and not matching a Reverse DNS or UUID pattern
             const whichDirectories = [
                 ...normalDirectories,
                 ...directoriesWithExtensions,

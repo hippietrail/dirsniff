@@ -386,6 +386,12 @@ function autoIdentify(
                 [normalFiles, includesAll, ["index.js", "App.js"]]
             ]
         },
+        {
+            name: "Retro Virtual Machine", steps: [
+                [normalDirectories, includes, ["snap"]],
+                [normalFiles, includes, ["machine"]]
+            ]
+        },
         // Ruby ? Ruby on Rails?
         {
             name: "Rust project", steps: [

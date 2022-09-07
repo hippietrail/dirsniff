@@ -34,6 +34,7 @@ type collection = DirentStat[] | string[] | extensionObject
 interface DirentStat {
     isFile: () => boolean
     isDirectory: () => boolean
+    isSymbolicLink: () => boolean
     name: string
     size?: number
     statError?: string
@@ -146,26 +147,28 @@ async function processDirents(depth: number, filename: string, dirents: DirentSt
     // keep all three as entries
     const [
         brokenEntries,              // 0
-        unknownEntries,             // 1
-        dotFiles,                   // 2
-        normalFiles,                // 3
-        dotDirectories,             // 4
-        //reverseDNSDirectories,    // 5
-        directoriesWithExtensions,  // 6
-        UUIDDirectories,            // 7
-        normalDirectories,          // 8
+        symbolicLinks,              // 1
+        unknownEntries,             // 2
+        dotFiles,                   // 3
+        normalFiles,                // 4
+        dotDirectories,             // 5
+        //reverseDNSDirectories,    // 6
+        directoriesWithExtensions,  // 7
+        UUIDDirectories,            // 8
+        normalDirectories,          // 9
         shouldBeEmpty,              // EXTRA!
     ] = collate(
         dirents, [
             d => d.statError !== undefined,                     // 0 broken
-            d => !d.isFile() && !d.isDirectory(),               // 1 unknown type
-            d => d.isFile() && d.name[0] === '.',               // 2 dot file
-            d => d.isFile(),                                    // 3 normal file
-            d => d.isDirectory() && d.name[0] === '.',          // 4 dot dir
-            //d => d.isDirectory() && revDNSRegex.test(d.name), // 5 reverse dns: com.apple.foo.bar
-            d => d.isDirectory() && d.name.includes('.'),       // 6 dir with file extension
-            d => d.isDirectory() && UUIDRegex.test(d.name),     // 7 UUID
-            d => d.isDirectory(),                               // 8 normal dir
+            d => d.isSymbolicLink(),                            // 1 symlink
+            d => !d.isFile() && !d.isDirectory(),               // 2 unknown type
+            d => d.isFile() && d.name[0] === '.',               // 3 dot file
+            d => d.isFile(),                                    // 4 normal file
+            d => d.isDirectory() && d.name[0] === '.',          // 5 dot dir
+            //d => d.isDirectory() && revDNSRegex.test(d.name), // 6 reverse dns: com.apple.foo.bar
+            d => d.isDirectory() && d.name.includes('.'),       // 7 dir with file extension
+            d => d.isDirectory() && UUIDRegex.test(d.name),     // 8 UUID
+            d => d.isDirectory(),                               // 9 normal dir
         ]
     ).map(dsa => dsa.map(ds => ds.name))
     
@@ -188,7 +191,8 @@ async function processDirents(depth: number, filename: string, dirents: DirentSt
     } else {
         const answers: string[] = autoIdentify(
             normalDirectories, dotDirectories, dirExtensions,
-            normalFiles, dotFiles, fileExtensions)
+            normalFiles, dotFiles, fileExtensions,
+            symbolicLinks)
 
         if (answers.length) {
             identified = true
@@ -209,6 +213,7 @@ async function processDirents(depth: number, filename: string, dirents: DirentSt
         if (!identified) {
             const collections: [collection, string][] = [
                 [ brokenEntries,                "broken" ],
+                [ symbolicLinks,                "symlinks" ],
                 [ normalFiles,                  "files" ],
                 [ normalDirectories,            "dirs" ],
                 [ zeroLenFilenames,             "zero byte files" ],
@@ -265,9 +270,10 @@ function checkAdditionalNotes(dotDirectories: string[], normalFiles: string[], d
 
 function autoIdentify(
     normalDirectories: string[], dotDirectories: string[], dirExtensions: string[],
-    normalFiles: string[], dotFiles: string[], fileExtensions: string[]
+    normalFiles: string[], dotFiles: string[], fileExtensions: string[],
+    symbolicLinks: string[]
 ) {
-    type step = [ string[], (a:string[], b:string[]) => boolean, string[] ]
+    type step = [ haystack: string[], check: (a:string[], b:string[]) => boolean, needles: string[] ]
     type entry = { name: string, steps: step[] }
     const table: entry[] = [
         {
@@ -353,6 +359,17 @@ function autoIdentify(
         },
         // Kotlin ?
         // Lua ? config.lua ? init.lua ?
+        {
+            name: "macOS application", steps: [
+                [normalDirectories, includes, ["Contents"]],
+            ]
+        },
+        {
+            name: "macOS application (wrapped)", steps: [
+                [normalDirectories, includes, ["Wrapper"]],
+                [symbolicLinks, includes, ["WrappedBundle"]],
+            ]
+        },
         {
             name: "Nim package", steps: [
                 [normalDirectories, includesAll, ["src", "tests"]],
@@ -542,9 +559,11 @@ async function processFilename(depth: number, filename: string) {
             const direntstats = await readdirAndStat(filename, depth)
             await processDirents(depth, filename, direntstats)
         } else if (s.isFile()) {
-            printEntry(depth, filename);
+            printEntry(depth, filename)
             printAnswer(depth, "file")
-
+        } else if (s.isSymbolicLink()) {
+            printEntry(depth, filename)
+            printAnswer(depth, "symlink")
         } else {
             printEntry(depth, filename);
             printAnswer(depth, "neither file nor directory")
@@ -572,6 +591,7 @@ async function readdirAndStat(filename: string, depth: number): Promise<DirentSt
                 let ds: DirentStat = {
                     isFile: () => dirent.isFile(),
                     isDirectory: () => dirent.isDirectory(),
+                    isSymbolicLink: () => dirent.isSymbolicLink(),
                     name: dirent.name,
                 }
 
@@ -583,6 +603,7 @@ async function readdirAndStat(filename: string, depth: number): Promise<DirentSt
                 return {
                     isFile: () => false,
                     isDirectory: () => false,
+                    isSymbolicLink: () => false,
                     name: dirent.name,
                     statError: (ex as NodeJS.ErrnoException).code,
                 }

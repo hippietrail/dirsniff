@@ -2,6 +2,7 @@
 
 import * as fsp from "fs/promises";
 import * as path from "path";
+import { resolve } from "path";
 import { exit } from "process";
 
 let MAXDEPTH = 1; // how many directories deep do we look if we don't recognize anything
@@ -11,10 +12,13 @@ let FOLLOWDOT = false; // if true, look into dot (hidden) directories as well as
 
 async function main() {
   let args: string[] = processCommandline(process.argv);
+  let results: DirectoryInfo[] = [];
 
   for (let i = 0; i < args.length; ++i) {
-    await processFilename(0, args[i]);
+    results.push(await processFilename(0, args[i]));
   }
+
+  printResults(results);
 }
 
 main();
@@ -40,7 +44,34 @@ interface DirentStat {
   statError?: string;
 }
 
-//////// Generic functions that could be used outside this project
+enum AdditionalInfoKind {
+  GitRepository,
+  GitHubRepository,
+  MacFinderFiles,
+}
+
+type AdditionalInfo = AdditionalInfoKind[];
+
+enum EntryKind {
+  Unknown,
+  Error,
+  File,
+  Directory,
+  SymbolicLink,
+}
+
+interface DirectoryInfo {
+  name: string;
+  kind: EntryKind;
+  identified: boolean;
+  error?: NodeJS.ErrnoException;
+  additionalInfo?: AdditionalInfo;
+  identificationFailures?: string[];
+  answers?: string[];
+  collections?: string;
+  verboseSummary?: string;
+  directoryInfos?: DirectoryInfo[];
+}
 
 // split up one array into N arrays based on N-1 tests. The last array holds the elements that didn't pass any of the tests.
 function collate<T>(input: T[], tests: ((d: T) => boolean)[]): Array<Array<T>> {
@@ -112,6 +143,65 @@ function printError(depth: number, msg: string): void {
   printText(depth, "* " + msg);
 }
 
+function printResults(results: DirectoryInfo[], depth: number = 0): void {
+  for (var res of results) {
+    printEntry(depth, res.name);
+
+    switch (res.kind) {
+      case EntryKind.Error:
+        printEntry(depth, res.name);
+        printAnswer(depth, "neither file nor directory");
+        break;
+
+      case EntryKind.Error:
+        if (res.error?.code === "ENOENT") {
+          printError(depth, "no such file: " + res.name);
+        } else {
+          printError(depth, "err: " + res.error?.code);
+        }
+        break;
+
+      case EntryKind.File:
+        printAnswer(depth, "file");
+        break;
+
+      case EntryKind.Directory:
+        printText(depth, "{");
+
+        let dis = res.directoryInfos ?? [];
+
+        if (dis.length > 0) {
+          if (res.identificationFailures?.length !== 0) {
+            console.log(
+              "*** an entry did not get collated into any category!",
+              res.identificationFailures
+            );
+          }
+
+          res.answers?.forEach((ans) => printAnswer(depth, ans));
+          if (res.collections != undefined) {
+            printAnswer(depth, res.collections);
+          }
+          if (!res.identified) {
+            printAnswer(depth, "unidentified");
+          }
+
+          printResults(dis, depth + 1);
+        } else {
+          printAnswer(depth, "empty");
+        }
+
+        printText(depth, "}");
+        break;
+
+      case EntryKind.SymbolicLink:
+        printEntry(depth, res.name);
+        printAnswer(depth, "symlink");
+        break;
+    }
+  }
+}
+
 // function printCollectionAnswer(depth: number, num: number, kind: string): void {
 //     printAnswer(depth, `a collection of ${num} ${kind} files`)
 // }
@@ -134,8 +224,13 @@ async function processDirents(
   depth: number,
   filename: string,
   dirents: DirentStat[]
-) {
-  printEntry(depth, filename);
+): Promise<DirectoryInfo> {
+  let directoryInfo: DirectoryInfo = {
+    name: filename,
+    kind: EntryKind.Directory,
+    identified: false,
+    directoryInfos: [],
+  };
 
   //const revDNSRegex = new RegExp(/^[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+$/)
   const UUIDRegex = new RegExp(
@@ -176,12 +271,7 @@ async function processDirents(
     (d) => d.isDirectory(), // 9 normal dir
   ]).map((dsa) => dsa.map((ds) => ds.name));
 
-  if (shouldBeEmpty.length !== 0) {
-    console.log(
-      "*** an entry did not get collated into any category!",
-      shouldBeEmpty
-    );
-  }
+  directoryInfo.identificationFailures = shouldBeEmpty;
 
   // arrays of strings
   const fileExtensions = normalFiles
@@ -194,10 +284,7 @@ async function processDirents(
 
   let identified = false;
 
-  if (dirents.length === 0) {
-    printAnswer(depth, "empty");
-    identified = true;
-  } else {
+  if (dirents.length > 0) {
     const answers: string[] = autoIdentify(
       normalDirectories,
       dotDirectories,
@@ -210,19 +297,21 @@ async function processDirents(
 
     if (answers.length) {
       identified = true;
-      answers.forEach((ans) => printAnswer(depth, ans));
+      directoryInfo.answers = answers;
     } else {
       const foundCollection = checkForCollections(fileextObj, fileExtensions);
       if (foundCollection !== undefined) {
         identified = true;
-        printAnswer(depth, foundCollection);
+        directoryInfo.collections = foundCollection;
       }
     }
 
-    if (!identified) printAnswer(depth, "unidentified");
+    directoryInfo.identified = identified;
 
-    checkAdditionalNotes(dotDirectories, normalFiles, dotFiles).forEach((add) =>
-      printAnswer(depth, `  with ${add}`)
+    directoryInfo.additionalInfo = checkAdditionalNotes(
+      dotDirectories,
+      normalFiles,
+      dotFiles
     );
 
     if (!identified) {
@@ -242,7 +331,10 @@ async function processDirents(
         [UUIDDirectories, "UUID dirs"],
       ];
 
-      if (VERBOSE) verboseSummary(depth, collections);
+      //   if (VERBOSE) verboseSummary(depth, collections);
+      if (VERBOSE) {
+        directoryInfo.verboseSummary = verboseSummary(depth, collections);
+      }
 
       const whichDirectories = [
         ...normalDirectories,
@@ -252,36 +344,43 @@ async function processDirents(
             [...dotDirectories, ...UUIDDirectories]
           : []),
       ];
+
       for (let i = 0; i < whichDirectories.length; ++i) {
         const childdirname = path.join(filename, whichDirectories[i]);
 
         if (depth < MAXDEPTH) {
-          printText(depth, "{");
-          await processFilename(depth + 1, childdirname);
-          printText(depth, "}");
+          let res: DirectoryInfo = await processFilename(
+            depth + 1,
+            childdirname
+          );
+
+          directoryInfo.directoryInfos?.push(res);
         }
       }
     }
   }
+
+  return Promise.resolve(directoryInfo);
 }
 
 function checkAdditionalNotes(
   dotDirectories: string[],
   normalFiles: string[],
   dotFiles: string[]
-) {
-  let additional = [];
+): AdditionalInfo {
+  let additional: AdditionalInfo = [];
 
   // Git
-  if (includes(dotDirectories, [".git"]))
+  if (includes(dotDirectories, [".git"])) {
     if (includes(dotDirectories, [".github"]))
-      additional.push("Github Git repository");
-    else additional.push("Git repository");
+      additional.push(AdditionalInfoKind.GitHubRepository);
+    else additional.push(AdditionalInfoKind.GitRepository);
+  }
 
   // Mac Finder
   // TODO there is also .localized but it can be both a zero-byte file and a file/directory extension, and it's not related to Finder
   if (includes(normalFiles, ["Icon\r"]) || includes(dotFiles, [".DS_Store"]))
-    additional.push("Mac Finder files");
+    additional.push(AdditionalInfoKind.MacFinderFiles);
 
   return additional;
 }
@@ -610,56 +709,74 @@ function countObToString(ob: extensionObject): string {
     .join(", ");
 }
 
-function verboseSummary(depth: number, collections: [collection, string][]) {
-  collections.forEach((coll) => {
-    let name: string = coll[1],
-      len: number,
-      str: string = "";
-    if (Array.isArray(coll[0])) {
-      len = coll[0].length;
-      if (len) {
-        let arr = coll[0];
-        if (typeof coll[0][0] !== "string") {
-          arr = arr.map((d) => (d as DirentStat).name);
+function verboseSummary(
+  depth: number,
+  collections: [collection, string][]
+): string {
+  return collections
+    .map((coll) => {
+      let name: string = coll[1],
+        len: number,
+        str: string = "";
+      if (Array.isArray(coll[0])) {
+        len = coll[0].length;
+        if (len) {
+          let arr = coll[0];
+          if (typeof coll[0][0] !== "string") {
+            arr = arr.map((d) => (d as DirentStat).name);
+          }
+          //if (coll[0] === normalDirectories)
+          //    str = arr.join('\n')
+          //else
+          str = arr.join(", ");
         }
-        //if (coll[0] === normalDirectories)
-        //    str = arr.join('\n')
-        //else
-        str = arr.join(", ");
+      } else {
+        len = Object.keys(coll[0]).length;
+        str = countObToString(coll[0]);
       }
-    } else {
-      len = Object.keys(coll[0]).length;
-      str = countObToString(coll[0]);
-    }
-    len && printText(depth + 2, `${name}: ${str}`);
-  });
+      return len > 0 ? `${name}: ${str}` : "";
+    })
+    .join("\n");
 }
 
-async function processFilename(depth: number, filename: string) {
+async function processFilename(
+  depth: number,
+  filename: string
+): Promise<DirectoryInfo> {
   try {
     const s = await fsp.lstat(filename);
 
     if (s.isDirectory()) {
       const direntstats = await readdirAndStat(filename, depth);
-      await processDirents(depth, filename, direntstats);
+      return processDirents(depth, filename, direntstats);
     } else if (s.isFile()) {
-      printEntry(depth, filename);
-      printAnswer(depth, "file");
+      return Promise.resolve({
+        name: filename,
+        kind: EntryKind.File,
+        identified: true,
+      });
     } else if (s.isSymbolicLink()) {
-      printEntry(depth, filename);
-      printAnswer(depth, "symlink");
+      return Promise.resolve({
+        name: filename,
+        kind: EntryKind.SymbolicLink,
+        identified: true,
+      });
     } else {
-      printEntry(depth, filename);
-      printAnswer(depth, "neither file nor directory");
+      return Promise.resolve({
+        name: filename,
+        kind: EntryKind.Unknown,
+        identified: false,
+      });
     }
   } catch (ex: any) {
     const err = ex as NodeJS.ErrnoException;
-    printEntry(depth, filename);
-    if (err.code === "ENOENT") {
-      printError(depth, "no such file: " + filename);
-    } else {
-      printError(depth, "err: " + err.code);
-    }
+
+    return Promise.reject({
+      name: filename,
+      kind: EntryKind.Error,
+      identified: false,
+      error: err,
+    });
   }
 }
 

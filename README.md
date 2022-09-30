@@ -2,7 +2,7 @@
 
 Identify directory structures, a bit like how `file` identifies files.
 
-`node dirsniff.js [-v] [-mN] [-d] path1 path2 ...`
+`node dirsniff.js [-v] [-m=N] [-d] path1 path2 ...`
 
 Commandline switches:
 

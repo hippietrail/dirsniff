@@ -7,7 +7,7 @@ Identify directory structures, a bit like how `file` identifies files.
 Commandline switches:
 
 - `-v` : Verbose mode. When directory is not identified print a summary of its contents. Off by default.
-- `-mN` : Maximum mumber of times to explore deeper when directory is not identified. Defaults to `1`.
+- `-m=N` : Maximum mumber of times to explore deeper when directory is not identified. Defaults to `1`.
 - `-d` : Explore into dot directories (hidden direcories on *nix systems). Off by default.
 
 Identifies directory structures of various programming languages and IDEs.

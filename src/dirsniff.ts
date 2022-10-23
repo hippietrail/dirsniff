@@ -2,7 +2,6 @@
 
 import * as fsp from "fs/promises";
 import * as path from "path";
-import { resolve } from "path";
 import { exit } from "process";
 
 let MAXDEPTH = 1; // how many directories deep do we look if we don't recognize anything
@@ -15,7 +14,11 @@ async function main() {
   let results: DirectoryInfo[] = [];
 
   for (let i = 0; i < args.length; ++i) {
-    results.push(await processFilename(0, args[i]));
+    try {
+      results.push(await processFilename(0, args[i]));
+    } catch (ex: any) {
+      console.error(`Error processing ${args[i]}; ${ex.error}`);
+    }
   }
 
   printResults(results);
@@ -64,7 +67,7 @@ interface DirectoryInfo {
   name: string;
   kind: EntryKind;
   identified: boolean;
-  error?: NodeJS.ErrnoException;
+  error?: Error;
   additionalInfo?: AdditionalInfo;
   identificationFailures?: string[];
   answers?: string[];
@@ -148,16 +151,17 @@ function printResults(results: DirectoryInfo[], depth: number = 0): void {
     printEntry(depth, res.name);
 
     switch (res.kind) {
-      case EntryKind.Error:
+      case EntryKind.Unknown:
         printEntry(depth, res.name);
         printAnswer(depth, "neither file nor directory");
         break;
 
       case EntryKind.Error:
-        if (res.error?.code === "ENOENT") {
+        let err = res.error as NodeJS.ErrnoException;
+        if (err && err.code === "ENOENT") {
           printError(depth, "no such file: " + res.name);
         } else {
-          printError(depth, "err: " + res.error?.code);
+          printError(depth, "err: " + res.error?.message);
         }
         break;
 
@@ -769,13 +773,11 @@ async function processFilename(
       });
     }
   } catch (ex: any) {
-    const err = ex as NodeJS.ErrnoException;
-
-    return Promise.reject({
+    return Promise.resolve({
       name: filename,
       kind: EntryKind.Error,
       identified: false,
-      error: err,
+      error: ex,
     });
   }
 }
